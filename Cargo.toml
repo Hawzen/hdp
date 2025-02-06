@@ -1,0 +1,8 @@
+[package]
+name = "hdp"
+version = "2.4.0"
+edition = "2025"
+
+[dependencies]
+socket2 = "0.5.8"
+
