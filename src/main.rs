@@ -36,6 +36,7 @@ fn main() -> io::Result<()> {
         let header_checksum = u16::from_be_bytes([ip_header[10], ip_header[11]]);
         let src_ip = &ip_header[12..16];
         let dst_ip = &ip_header[16..20];
+        let payload = &buffer[20..size];
 
         // Print everything
         println!("Version: {}", version);
@@ -51,6 +52,14 @@ fn main() -> io::Result<()> {
         println!("Header Checksum: {}", header_checksum);
         println!("Source IP: {:?}", src_ip);
         println!("Destination IP: {:?}", dst_ip);
+        println!("Payload: ");
+
+        // TODO: STOP ADDING THESE UNSAFE BLOCKS AND LEARN HOW TO DO THIS SAFELY :D
+        for byte in payload {
+            let byte = unsafe { byte.assume_init() };
+            print!("{:02x}", byte);
+        }
+        println!("\n");
         
 
         
