@@ -4,18 +4,22 @@ use std::net::SocketAddr;
 use std::mem::MaybeUninit;
 
 fn main() -> io::Result<()> {
-    let socket = Socket::new(Domain::IPV4, Type::RAW, Some(Protocol::from(253)))?;
+    let protocol_number = 0;
+    let socket = Socket::new(Domain::IPV4, Type::RAW, Some(Protocol::from(protocol_number)))?;
 
     let bind_addr = SocketAddr::from(([0, 0, 0, 0], 0));
     socket.bind(&bind_addr.into())?;
 
     let mut buffer: [MaybeUninit<u8>; 65535] = unsafe { MaybeUninit::uninit().assume_init() };
 
-    println!("Server listening on IP protocol 253 (raw)...");
+    println!("Server listening on IP protocol number: {}", protocol_number);
 
     loop {
         // Receive raw IP packets into `buffer`.
         let (size, _) = socket.recv_from(&mut buffer)?;
+
+        // print something
+        println!("We got something!");
 
         // Dear sir, this might appear unsafe, but we are only reading the buffer up to `size`
         // So we're not reading uninitialized memory.
@@ -72,6 +76,20 @@ fn main() -> io::Result<()> {
         println!("Destination Port: {}", dest_port);
         println!("Timestamp: {}", unix_timestamp);
         println!("Data: {}", String::from_utf8_lossy(data));
+        println!("\n");
+
+        // Let's parse it as UDP packet
+        let udp_header = &received_data[20..28];
+        let src_port = u16::from_be_bytes([udp_header[0], udp_header[1]]);
+        let dst_port = u16::from_be_bytes([udp_header[2], udp_header[3]]);
+        let length = u16::from_be_bytes([udp_header[4], udp_header[5]]);
+        let checksum = u16::from_be_bytes([udp_header[6], udp_header[7]]);
+
+        println!("~~~ UDP Header ~~~");
+        println!("Source Port: {}", src_port);
+        println!("Destination Port: {}", dst_port);
+        println!("Length: {}", length);
+        println!("Checksum: {}", checksum);
         println!("\n\n");
     }
 }
