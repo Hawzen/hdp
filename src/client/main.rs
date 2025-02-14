@@ -2,8 +2,6 @@ use std::env;
 use std::io::{self, Read};
 use std::net::{IpAddr, SocketAddr};
 use std::time::{SystemTime, Duration};
-use sys_info;
-use whoami;
 
 use atty::Stream;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
@@ -21,29 +19,20 @@ fn main() -> io::Result<()> {
     let dst_ip = env::args().nth(1).expect(usage_message).parse::<IpAddr>().expect("The IP address is invalid or non-existent");
 
     // // Ready up a socket and send the packet
-
-    // First, identify the machine that we are running on
-    // Print Information
-    println!("--- System Info ---");
-    println!("OS: {} {}", 
-        sys_info::os_type().unwrap_or_else(|_| "Unknown".to_string()), 
-        sys_info::os_release().unwrap_or_else(|_| "Unknown".to_string())
-    );
-    println!("Architecture: {}", whoami::arch());
-    println!("-------------------");
-
-
     // Ok so my idea is to loop through all the protocol numbers from -1 to 256, and on each iteration
     //  i output a markdown row with the protocol number, and the time of sending the packet.
-    println!("| Protocol Number | Succeeded | Time before sending packet (ns) | Failure reason |");
+    println!("| Protocol Number | Succeeded (Client) | Time (μs) (Client) | Byte sum (Client) | Failure reason (Client) |");
     for protocol_number in -1..=256 {
+        // If we don't sleep here, the packets will be sent too fast and the server will not be able to keep up
+        std::thread::sleep(Duration::from_millis(10));
+
         match send_packet(protocol_number, dst_ip, payload) {
-            Ok(time_right_before_sending_packet) => {
-                println!("| {} | 🫡🫡🫡 | {} |", protocol_number, time_right_before_sending_packet.as_nanos());
+            Ok((time_right_before_sending_packet, byte_sum)) => {
+                println!("| {} | 🫡 | {} | {} | - |", protocol_number, time_right_before_sending_packet.as_micros(), byte_sum);
             },
             Err(e) => {
                 // Explode
-                println!("| {} | 🤯🤯🤯 | - | {} |", protocol_number, e);
+                println!("| {} | 🤯 | - | - | {} |", protocol_number, e);
             }
         }
     }
@@ -51,7 +40,7 @@ fn main() -> io::Result<()> {
 }
 
 
-fn send_packet(protocol_number: i32, dst_ip: IpAddr, payload: &[u8]) -> Result<Duration, Box<dyn std::error::Error>> {
+fn send_packet(protocol_number: i32, dst_ip: IpAddr, payload: &[u8]) -> Result<(Duration, u64), Box<dyn std::error::Error>> {
     let socket = Socket::new(Domain::IPV4, Type::RAW, Some(Protocol::from(protocol_number)))?;
     socket.set_header_included_v4(false)?;
 
@@ -62,7 +51,9 @@ fn send_packet(protocol_number: i32, dst_ip: IpAddr, payload: &[u8]) -> Result<D
     let time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH);
     socket.send_to(&packet, &dest_sockaddr)?;
 
-    Ok(time?)
+    // Return the time and the sum of the bytes in the the packet including ip header
+    let byte_sum = 20 /* (IP Header) */ + 12 /* (HDP Header) */ + payload.len() as u64;
+    Ok((time?, byte_sum))
 }
 
 /// Header layout (12 bytes total):
