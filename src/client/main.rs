@@ -1,7 +1,9 @@
 use std::env;
 use std::io::{self, Read};
 use std::net::{IpAddr, SocketAddr};
-use std::time::SystemTime;
+use std::time::{SystemTime, Duration};
+use sys_info;
+use whoami;
 
 use atty::Stream;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
@@ -19,22 +21,48 @@ fn main() -> io::Result<()> {
     let dst_ip = env::args().nth(1).expect(usage_message).parse::<IpAddr>().expect("The IP address is invalid or non-existent");
 
     // // Ready up a socket and send the packet
-    let protocol_number = 253;
+
+    // First, identify the machine that we are running on
+    // Print Information
+    println!("--- System Info ---");
+    println!("OS: {} {}", 
+        sys_info::os_type().unwrap_or_else(|_| "Unknown".to_string()), 
+        sys_info::os_release().unwrap_or_else(|_| "Unknown".to_string())
+    );
+    println!("Architecture: {}", whoami::arch());
+    println!("-------------------");
+
+
+    // Ok so my idea is to loop through all the protocol numbers from -1 to 256, and on each iteration
+    //  i output a markdown row with the protocol number, and the time of sending the packet.
+    println!("| Protocol Number | Succeeded | Time before sending packet (ns) | Failure reason |");
+    for protocol_number in -1..=256 {
+        match send_packet(protocol_number, dst_ip, payload) {
+            Ok(time_right_before_sending_packet) => {
+                println!("| {} | 🫡🫡🫡 | {} |", protocol_number, time_right_before_sending_packet.as_nanos());
+            },
+            Err(e) => {
+                // Explode
+                println!("| {} | 🤯🤯🤯 | - | {} |", protocol_number, e);
+            }
+        }
+    }
+    Ok(())
+}
+
+
+fn send_packet(protocol_number: i32, dst_ip: IpAddr, payload: &[u8]) -> Result<Duration, Box<dyn std::error::Error>> {
     let socket = Socket::new(Domain::IPV4, Type::RAW, Some(Protocol::from(protocol_number)))?;
     socket.set_header_included_v4(false)?;
 
     let dest = SocketAddr::new(dst_ip, 0);
     let dest_sockaddr = SockAddr::from(dest);
 
-    // Time 
     let packet = build_hdp_packet(&payload);
-    let before_packet_sent = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH);
+    let time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH);
     socket.send_to(&packet, &dest_sockaddr)?;
-    let after_packet_sent = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH);
 
-    println!("Packet sent successfully!");
-    println!("Time taken to send packet: {:?}", after_packet_sent.unwrap().as_nanos() - before_packet_sent.unwrap().as_nanos());
-    Ok(())
+    Ok(time?)
 }
 
 /// Header layout (12 bytes total):

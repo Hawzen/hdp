@@ -5,7 +5,11 @@ edition = "2021"
 
 [dependencies]
 socket2 = { version = "0.5.8", features = ["all"] }
+# I sometimes want to edit the code for the lib
+# socket2 = { path = "../../../tmp/socket2", features = ["all"] }
 atty = "0.2"
+sys-info = "0.9"
+whoami = "1.4"
 
 [[bin]]
 name = "server"
