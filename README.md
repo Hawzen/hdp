@@ -1,7 +1,7 @@
-# What is HDP?
+# What would happen if we didn't use TCP or UDP? 
 Switches, bridges, routers, load balancers, firewalls—these are the unsung gatekeepers of the internet, silently directing, blocking, mirroring, and reshaping traffic to make everything work. Without them, this very document wouldn’t have reached you
 
-But the magic doesn’t stop at the network. The operating system has its own invisible choreography—classifying packets, queuing them, enforcing firewall rules, translating addresses, and deciding which data gets the green light and which gets silently discarded. It’s a layered dance, with each component playing by its own rules, shaping what’s “allowed” and what never sees the light of day
+But the magic doesn’t stop at the network. The operating system has its own invisible choreography—classifying packets, queuing them, enforcing firewall rules, translating addresses, and deciding which data gets the green light and which gets silently discarded. It’s a layered activity, with each component playing by its own rules, shaping what’s “allowed” and what never sees the light of day
 
 One day, I had a thought: **what if I sent a packet using a transport protocol that didn’t exist?** Not TCP, not UDP, not even ICMP—just something I made up. Would my OS play along, or shut it down before it even left the machine? Would it slip through routers unnoticed? Would some middlebox, somewhere, sniff it out and discard it as an abomination? Could it, by some strange quirk of network filtering, actually travel _faster_ by avoiding common firewall rules?
 
@@ -19,10 +19,9 @@ But wait—what exactly is a transport layer protocol?
 The internet isn’t magic (though it often feels like it). It's a tower of protocols, each playing a distinct role in getting messages from one machine to another. At the application level, you send a request—maybe ordering food, loading a website, or streaming a video. That request then gets wrapped in multiple layers of instructions, addresses, and metadata, until it finally turns into raw bits ready to be launched across the network
 
 It kinda works like this:
-<figure>  
-  <img src="./readme_assets/internet_protocols.png" alt="a visual guide to how the internet works, it kinda sucks but that why i like it.">  
-  <figcaption>The diagram is 100% correct and should be included in all networking textbooks.</figcaption>  
-</figure>  
+<p align="center">  <img src="./readme_assets/internet_protocols.png" alt="a visual guide to how the internet works, it kinda sucks but that why i like it."> </p>
+<p align="center"><sub>The diagram is 100% correct and should be included in all networking textbooks.</sub></p>
+
 At the top, applications like browsers, games, or messaging services generate requests (like “*Load this website*”, “*Send this message*”, or “*Connect me to this game server*”). These requests then begin their descent through the network stack, getting wrapped, encoded, and addressed at each layer until they’re nothing but streams of raw bits, ready to be sent off into the void that is the internet
 
 Each layer plays a role in this journey. **IP**—the Internet Protocol—is what gives every machine a unique address, making it possible to route data across networks. The **link layer** takes care of actually moving bits between physical devices, whether over Wi-Fi, Ethernet, or even fiber optics. There are more layers, each with its own responsibilities, but we won’t get into all of them now. Instead, let’s focus on the layer that makes network communication truly practical
@@ -94,6 +93,13 @@ My initial choice of **255** was arbitrary—it was an unused protocol number. B
 - Or 2, which is the protocol number used for **ICMP** (i.e., the thing powering `ping`)
 - Or even 256, an index beyond the defined boundaries of the IP Protocol
 Would they make it? Would the OS freak out?
+
+Let's see:
+```haskell
+fortune | cowsay | sudo cargo run --bin client 127.0.0.1 # This time looping over protocol numbers
+```
+
+**Results**:
 
 | Protocol Number | Source IP (Server) | Byte Sum (Server) | Received (Server) | Succeeded (Client) | Byte sum (Client) | Failure reason (Client)                          | Time difference (μs) |
 | --------------: | :----------------- | ----------------: | :---------------- | :----------------- | :---------------- | :----------------------------------------------- | -------------------: |
@@ -356,23 +362,76 @@ Would they make it? Would the OS freak out?
 |             255 | 127.0.0.1          |               373 | 🫡                | 🫡                 | 373               | -                                                |                   71 |
 |             256 | nan                |               nan | 🤯                | 🤯                 | -                 | Invalid argument (os error 22)                   |                  nan |
 
-___________
+### What’s up with these failures?
+Most protocol numbers worked fine—the OS saw the packet, looped it back, and my server received it without an issue. But a few of them outright failed at different points in the stack
+- **Protocols 1, 2, and 6 failed at the server side**. Meaning: the client successfully sent them, but the server never saw them
+- **Protocols 50 and 51 failed at the client side**. The OS refused to even send them
+- **Protocol 256 didn't even make it past the `socket()` call**
 
-# TODOOOOOOOOOOOO
+But *why?* What’s making the OS treat these packets differently?
+### Syscalls: What actually matters
+One of the most useful debugging techniques I learnt early on when dealing with low-level code is to trace the *system calls* a process is making
 
-Observations
-1. I can send my packet successfully through almost all protocol numbers
-2. Protocol numbers 1, 2, & 6 fail at the server side
-3. Protocol numbers 50, 51, & 256 fail at the client side
-## Observation 1: Why aren't some 
+A [system call](https://en.wikipedia.org/wiki/System_call) for the uninitiated is just a function that allows applications to request privileged resources from the OS—whether that’s opening a file, allocating memory, or, in our case, sending a packet over the network
+
+In my Rust code I use a library called [`socket2`](https://docs.rs/socket2/latest/socket2/index.html) which implements a pretty wrapper over the system calls provided by my OS. And to send a packet, I request a socket—which you can think of as just a special file descriptor my code can use to write in to communicate over the network
+
+Here's what the client would do:
 ```c
 int sockfd = socket(
-    AF_INET,    // Domain: ARPA Internet protocols
-    SOCK_RAW,   // Type: Raw socket. Normally, the OS handles all the communication up until the application layer, though with raw sockets we request the OS to give us the raw IP packet
-    255         // Protocol: I chose 255, which isn't assigned to any protocol as of now
+    AF_INET,    // Domain: ARPA Internet protocols. This tells the OS that we're interested in the IP protocols
+    SOCK_RAW,   // Type: Raw socket. The OS normally handles the transport layer, but this gives us full control.
+    255         // Protocol: We looped over this field.
+);
+```
+### Revisiting the failures
+**1, 2, and 6: The Server Never Sees Them**  
+These packets were successfully transmitted from the client, but they were intercepted before my server had a chance to look at them. That suggests something inside the OS intercepted them
+
+At first, I naively expected my server to capture any raw IP packets it received. The initialization looked like this:  
+```c
+int sockfd = socket(
+    AF_INET,    // Internet domain
+    SOCK_RAW,   // Raw socket: should give us full control
+    0           // Let the OS decide the protocol
 );
 ```
 
+I assumed that passing `0` as the protocol meant:  
+*"Give me everything—TCP, UDP, whatever it is, forward it"*  
+
+For context, I ran these experiments on my Mac, which runs Darwin. Looking at the [documentation](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/socket.2.html), there is really nothing mentioning the Protocol Number = 0 trick
+
+Under the hood, Darwin is derives much of its networking stack from another OS, BSD, meaning it inherits BSD’s socket behaviour and network stack quirks. And on a whim I checked the **[BSD socket documentation](https://man.openbsd.org/socket.2)**, and I found this frustratingly vague line:  
+
+> "A value of 0 for `protocol` will let the system select an appropriate protocol for the requested socket type."  
+
+So instead of delivering **all** raw packets, my OS was silently (and haphazardly) filtering them. My server never even saw the ICMP (1), IGMP (2), or TCP (6) packets—because Darwin likely deemed my socket not appropriate to receive those protocols..
+
+**50 and 51: The Client Can’t Even Send Them**  
+Here, the OS flat-out refused to send the packets. These aren’t just arbitrary numbers—they’re part of **IPSec (ESP and AH)**, which is used for encrypted VPN traffic
+
+**256: The `socket()` Call Fails Immediately**  
+This one is simple:  
+- The IPv4 protocol field is 8 bits meaning valid values range from 0 to 255.  
+- 256 is simply too large—the OS rejects it outright as an invalid argument.
+
+No surprises here. But what *was* surprising is what happened when I tried the same experiment on Linux..
+
+After seeing these inconsistencies, I was curious as to how Linux would behave. So I spun up a Linux VM and re-ran the experiment. Right away, the behaviour was very different
+
+Running the server I quickly noticed that Linux does not allow binding a raw socket to protocol `0`—Some invalid protocol numbers like 256 *worked*. For reference, I logged the results in [`results_no_server_linux_client_loopback`](./samples/results_no_server_linux_client_loopback.md).  
+### Lessons learned
+Custom transport-layer protocols are doable, but the OS isn’t exactly welcoming. The networking stack has assumptions baked in, and raw sockets aren’t as raw as you’d expect
+
+I imagine this is why most new protocols live at the application layer instead. Instead of fighting the OS, engineers just build on top of existing transport protocols. QUIC, for example, runs over UDP and avoids these issues entirely
+
+And if you're ever working with raw sockets, *please* test across multiple OSes. If Darwin lets you do something, Linux might shut it down. If Linux is fine with it, Windows might pretend it doesn’t exist. There’s no universal behaviour, even if they claim to implement the POSIX standard
+### Next step: What happens outside loopback?
+So far, I’ve only tested loopback traffic—packets never left my machine. What happens when I try sending HDP over the public internet?
+- Will routers forward it, or will they drop it?
+- Will firewalls let it through, or will they see it as an attack?
+- Will its there be any latency differences when using a custom protocol as opposed to something like TCP?
 # Experiment #2: 
 Now let's do it with a digital ocean droplet
 # Sharing
