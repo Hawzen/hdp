@@ -1,40 +1,40 @@
 # What would happen if we didn't use TCP or UDP? 
-Switches, bridges, routers, load balancers, firewalls—these are the unsung gatekeepers of the internet, silently directing, blocking, mirroring, and reshaping traffic to make everything work. Without them, this very document wouldn’t have reached you
+Switches, bridges, routers, load balancers, firewalls—these network boxes keep the internet running. Routing, blocking, mirroring, duplicating and deduplicating traffic in ways most people never think about. Without them, this document wouldn’t have reached you
 
-But the magic doesn’t stop at the network. The operating system has its own invisible choreography—classifying packets, queuing them, enforcing firewall rules, translating addresses, and deciding which data gets the green light and which gets silently discarded. It’s a layered activity, with each component playing by its own rules, shaping what’s “allowed” and what never sees the light of day
+But the network is just one layer. The OS has its own way of handling packets—classifying, queuing, enforcing firewall rules, translating addresses, deciding what gets through and what gets dropped without a trace. Every part plays by its own rules, shaping what’s “allowed” and what's not
 
-One day, I had a thought: **what if I sent a packet using a transport protocol that didn’t exist?** Not TCP, not UDP, not even ICMP—just something I made up. Would my OS play along, or shut it down before it even left the machine? Would it slip through routers unnoticed? Would some middlebox, somewhere, sniff it out and discard it as an abomination? Could it, by some strange quirk of network filtering, actually travel _faster_ by avoiding common firewall rules?
+At some point, I wondered—*what if I sent a packet using a transport protocol that didn’t exist?* Not TCP, not UDP, not even ICMP—something completely made up. Would the OS let it through? Would it get stopped before it even left my machine? Would routers ignore it, or would some middlebox kill it on sight? Could it actually move faster by slipping past common firewall rules?
 
-I had no clue
+No idea.
 
-So, naturally, I had to try
+So I had to try.
 
-To find out, I ran two experiments. First, I sent my custom packets from my machine to itself—just to see how the OS would handle them. Then, I raised the stakes: I launched them across continents to a remote Linux server, waiting to see if they’d survive the journey
+First, I sent the packets to myself, just to see how my own machine handled the poison I made up. Then, I sent them across continents to a remote Linux server to see if they’d actually make it.
 # Some background first
 > [!NOTE]
 > Feel free to skip this section if you already know how the internet works. Otherwise, continue reading on
 
 But wait—what exactly is a transport layer protocol?
 
-The internet isn’t magic (though it often feels like it). It's a tower of protocols, each playing a distinct role in getting messages from one machine to another. At the application level, you send a request—maybe ordering food, loading a website, or streaming a video. That request then gets wrapped in multiple layers of instructions, addresses, and metadata, until it finally turns into raw bits ready to be launched across the network
+The internet isn’t magic. It just looks that way. Underneath, it’s a stack of protocols, each one shoving data to the next until it reaches its destination. At the application level, you send a request—loading a website, streaming a video, or whatever you do. That request gets wrapped by the OS in multiple layers of metadata, addresses, and headers, until it’s nothing but raw bits flying through the network
 
 It kinda works like this:
 <p align="center">  <img src="./readme_assets/internet_protocols.png" alt="a visual guide to how the internet works, it kinda sucks but that why i like it."> </p>
 <p align="center"><sub>The diagram is 100% correct and should be included in all networking textbooks.</sub></p>
 
-At the top, applications like browsers, games, or messaging services generate requests (like “*Load this website*”, “*Send this message*”, or “*Connect me to this game server*”). These requests then begin their descent through the network stack, getting wrapped, encoded, and addressed at each layer until they’re nothing but streams of raw bits, ready to be sent off into the void that is the internet
+At the top, apps—browsers, games, whatever—generate requests (Load this page, Send this message, Connect to this game server). Then the requests start their descent through the network stack, getting wrapped, encoded, and addressed at each layer, until all that’s left is a stream of bits flying into the void
 
-Each layer plays a role in this journey. **IP**—the Internet Protocol—is what gives every machine a unique address, making it possible to route data across networks. The **link layer** takes care of actually moving bits between physical devices, whether over Wi-Fi, Ethernet, or even fiber optics. There are more layers, each with its own responsibilities, but we won’t get into all of them now. Instead, let’s focus on the layer that makes network communication truly practical
+Each layer plays a role. IP assigns addresses and makes sure packets know where they’re going. The link layer handles the actual transmission—Wi-Fi, Ethernet, fiber optics, whatever. There’s more to it, but we’re not going down that rabbit hole right now. What matters is the layer that makes network communication actually usable
 
-The **transport layer** is where networking starts to get interesting. It’s the first truly complex protocol layer, responsible for more than just moving packets—it enables multiple applications to share the same machine, ensures reliability when needed, and defines how data flows between systems
+The **transport layer** is where networking personally starts to get interesting. It’s the first truly complex protocol layer. It doesn’t just move packets—it manages connections, makes sure multiple applications can share the same machine, and decides how data should flow.
 
-This is where **TCP**, **UDP**, and friends come into play. The **IP Protocol** defines a field called `Protocol`. Setting this field to 6 means the encapsulated packet is TCP, 17 is UDP, and [there are others defined](https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers) but some numbers are deliberately left out for future use
+This is where **TCP**, **UDP**, and their weird cousins live. The **IP Protocol** defines a field called `Protocol`. Setting this field to 6 means the encapsulated packet is TCP, 17 is UDP, and [there are others defined](https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers) but some numbers are deliberately left out for future use
 
 But what if we used those *unused* numbers?
 # Experiment #1: Sending traffic.. to me!
 First, I designed a [simple protocol](./hdp_specification.md): **HDP**. The specifics don’t matter—what matters is that it doesn’t resemble any known protocol. It’s an outsider, something the OS and network stack weren’t expecting
 
-Next, I built a [server](./src/server/main.rs) and a [client](./src/client/main.rs). The client crafts an HDP packet (with an IP Protocol of 255) and hands it off to the OS, trusting it to deliver the data to 127.0.0.1—the loopback interface. This sends the packet full circle, back to the OS, which (if all goes well) will recognize it, process it, and hand it off to the waiting server..! 
+Next, I built a [server](./src/server/main.rs) and a [client](./src/client/main.rs). The client crafts an HDP packet (with an IP Protocol of 255) and hands it off to the OS, trusting it to deliver the data to itself. This sends the packet full circle, back to the OS, which (if all goes well) will recognize it, process it, and hand it off to the waiting server..! 
 
 I opened two shells—one was the client:
 ```haskell
@@ -363,18 +363,18 @@ fortune | cowsay | sudo cargo run --bin client 127.0.0.1 # This time looping ove
 |             256 | nan                |               nan | 🤯                | 🤯                 | -                 | Invalid argument (os error 22)                   |                  nan |
 
 ### What’s up with these failures?
-Most protocol numbers worked fine—the OS saw the packet, looped it back, and my server received it without an issue. But a few of them outright failed at different points in the stack
+Most protocol numbers worked fine—the OS saw the packet, looped it back, and my server received it without an issue. But a few of them outright _failed_ at different points in the stack
 - **Protocols 1, 2, and 6 failed at the server side**. Meaning: the client successfully sent them, but the server never saw them
 - **Protocols 50 and 51 failed at the client side**. The OS refused to even send them
 - **Protocol 256 didn't even make it past the `socket()` call**
 
 But *why?* What’s making the OS treat these packets differently?
 ### Syscalls: What actually matters
-One of the most useful debugging techniques I learnt early on when dealing with low-level code is to trace the *system calls* a process is making
+One of the most useful debugging techniques I learnt debugging this stuff is, when dealing with low-level code, trace the *system calls* a process is making
 
 A [system call](https://en.wikipedia.org/wiki/System_call) for the uninitiated is just a function that allows applications to request privileged resources from the OS—whether that’s opening a file, allocating memory, or, in our case, sending a packet over the network
 
-In my Rust code I use a library called [`socket2`](https://docs.rs/socket2/latest/socket2/index.html) which implements a pretty wrapper over the system calls provided by my OS. And to send a packet, I request a socket—which you can think of as just a special file descriptor my code can use to write in to communicate over the network
+In my Rust code I use a library called [`socket2`](https://docs.rs/socket2/latest/socket2/index.html) which implements a pretty wrapper over the system calls provided by my OS. And to send a packet, I request a socket—which you can think of as just a special file my code can write in to communicate over the network
 
 Here's what the client would do:
 ```c
@@ -388,7 +388,7 @@ int sockfd = socket(
 **1, 2, and 6: The Server Never Sees Them**  
 These packets were successfully transmitted from the client, but they were intercepted before my server had a chance to look at them. That suggests something inside the OS intercepted them
 
-At first, I naively expected my server to capture any raw IP packets it received. The initialization looked like this:  
+Originally, I assumed my server would capture any raw IP packet it received. The socket looked like this:
 ```c
 int sockfd = socket(
     AF_INET,    // Internet domain
@@ -397,47 +397,44 @@ int sockfd = socket(
 );
 ```
 
-I assumed that passing `0` as the protocol meant:  
+I expected 0 to mean:
 *"Give me everything—TCP, UDP, whatever it is, forward it"*  
 
 For context, I ran these experiments on my Mac, which runs Darwin. Looking at the [documentation](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/socket.2.html), there is really nothing mentioning the Protocol Number = 0 trick
 
-Under the hood, Darwin is derives much of its networking stack from another OS, BSD, meaning it inherits BSD’s socket behaviour and network stack quirks. And on a whim I checked the **[BSD socket documentation](https://man.openbsd.org/socket.2)**, and I found this frustratingly vague line:  
+Under the hood, Darwin is just like BSD but with a ton of makeup, meaning it inherits BSD’s socket behaviour and network stack quirks. And on a whim I checked the **[BSD socket documentation](https://man.openbsd.org/socket.2)**, and I found this frustratingly vague line:  
 
 > "A value of 0 for `protocol` will let the system select an appropriate protocol for the requested socket type."  
 
-So instead of delivering **all** raw packets, my OS was silently (and haphazardly) filtering them. My server never even saw the ICMP (1), IGMP (2), or TCP (6) packets—because Darwin likely deemed my socket not appropriate to receive those protocols..
+So instead of delivering **all** raw packets, my OS was silently (and haphazardly) filtering them. My server never even saw the ICMP (1), IGMP (2), or TCP (6) packets—because Darwin likely deemed my socket not appropriate to receive those protocols.. or something?
 
 **50 and 51: The Client Can’t Even Send Them**  
-Here, the OS flat-out refused to send the packets. These aren’t just arbitrary numbers—they’re part of **IPSec (ESP and AH)**, which is used for encrypted VPN traffic
+Here, the OS flat-out refused to send the packets. These aren’t just arbitrary numbers—they’re part of **IPSec (ESP and AH)**, which is used for encrypted VPN traffic. I'm not sure _why_ the OS blocked them, but I imagine it's a security feature of sorts in Darwin
 
 **256: The `socket()` Call Fails Immediately**  
 This one is simple:  
-- The IPv4 protocol field is 8 bits meaning valid values range from 0 to 255.  
-- 256 is simply too large—the OS rejects it outright as an invalid argument.
+- The IPv4 protocol field is 8 bits meaning valid values range from 0 to 255
+- 256 is simply too large—the OS rejects it outright as an invalid argument
 
 No surprises here. But what *was* surprising is what happened when I tried the same experiment on Linux..
 
 After seeing these inconsistencies, I was curious as to how Linux would behave. So I spun up a Linux VM and re-ran the experiment. Right away, the behaviour was very different
 
-Running the server I quickly noticed that Linux does not allow binding a raw socket to protocol `0`—Some invalid protocol numbers like 256 *worked*. For reference, I logged the results in [`results_no_server_linux_client_loopback`](./samples/results_no_server_linux_client_loopback.md).  
+Running the server I quickly noticed that Linux does not allow binding a raw socket to protocol `0`—Some invalid protocol numbers like 256 *worked*. For reference, I logged the results in [`results_no_server_linux_client_loopback`](./samples/results_no_server_linux_client_loopback.md). I was satisfied that at least _some_ of the protocol numbers were working as expected
 ### Lessons learned
-Custom transport-layer protocols are doable, but the OS isn’t exactly welcoming. The networking stack has assumptions baked in, and raw sockets aren’t as raw as you’d expect
+Custom transport-layer protocols are doable, buuuuut the OS isn’t exactly welcoming. The networking stack has so many assumptions baked in, and raw sockets aren’t as raw as you’d expect
 
 I imagine this is why most new protocols live at the application layer instead. Instead of fighting the OS, engineers just build on top of existing transport protocols. QUIC, for example, runs over UDP and avoids these issues entirely
 
-And if you're ever working with raw sockets, *please* test across multiple OSes. If Darwin lets you do something, Linux might shut it down. If Linux is fine with it, Windows might pretend it doesn’t exist. There’s no universal behaviour, even if they claim to implement the POSIX standard
+And if you're ever working with raw sockets, *please* test across multiple OSes. If Darwin lets you do something, Linux might shut it down. If Linux is fine with it, Windows might pretend it doesn’t exist. There’s really no universal behaviour, even if they claim to _implement the POSIX standard_
+
 ### Next step: What happens outside loopback?
-So far, I’ve only tested loopback traffic—packets never left my machine. What happens when I try sending HDP over the public internet?
-- Will routers forward it, or will they drop it?
-- Will firewalls let it through, or will they see it as an attack?
-- Will its there be any latency differences when using a custom protocol as opposed to something like TCP?
+So far, these packets never left my machine. Now, I want to send HDP over the public internet:
+-	Will routers forward it, or will they drop it?
+-	Will firewalls let it through, or flag it as an attack?
+-	Will it have different latency compared to TCP?
+- Will I accidentally brick DigitalOcean’s network? :D
+Time to find out
+
+# TODOOOOOO
 # Experiment #2: 
-Now let's do it with a digital ocean droplet
-# Sharing
-I'm thinking of creating a README / blog post where I report my findings
-# Resources
-- The [UDP protocol specification](https://datatracker.ietf.org/doc/html/rfc768) is so minimal it is almost funny
-- [IP Protocol numbers that are assigned for testing](https://datatracker.ietf.org/doc/html/rfc3692#section-2.1)
-- [The list of protocols](https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers) supported under the IP protocol is pretty interesting
-- [This](https://hackaday.com/2024/09/21/when-raw-network-sockets-arent-raw-raw-sockets-in-macos-and-linux/) article speaks about some differences between raw sockets in Linux & FreeBSD
