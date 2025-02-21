@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 use socket2::{Domain, Protocol, Socket, Type};
+use std::env;
 use std::io::{self, Write};
 use std::fs::OpenOptions;
 use std::net::SocketAddr;
@@ -7,15 +8,20 @@ use std::mem::MaybeUninit;
 use std::time::SystemTime;
 use std::fs::create_dir_all;
 
-fn main() -> io::Result<()> {
-    // // Init
-    let protocol_number = 0;
-    let socket = Socket::new(Domain::IPV4, Type::RAW, Some(Protocol::from(protocol_number)))?;
 
+fn main() -> io::Result<()> {
+    // IO
+    let usage_message = "Usage: server <ip-protocol>";
+    let ip_protocol = env::args().nth(1).expect(usage_message).parse::<i32>().expect("use a valid proto dummy");
+
+    // Init
+    let socket = Socket::new(Domain::IPV4, Type::RAW, Some(Protocol::from(ip_protocol)))?;
     let bind_addr = SocketAddr::from(([0, 0, 0, 0], 0));
     socket.bind(&bind_addr.into())?;
 
     let mut buffer: [MaybeUninit<u8>; 65535] = unsafe { MaybeUninit::uninit().assume_init() };
+
+    println!("Server is listening on {:?}, protocol: {}", socket.local_addr()?, ip_protocol);
 
     // This will be relevant later, trust me
     let dir_path = "/tmp/hdp";
