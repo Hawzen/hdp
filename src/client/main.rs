@@ -24,7 +24,7 @@ fn main() -> io::Result<()> {
     println!("| Protocol Number | Succeeded (Client) | Time (μs) (Client) | Byte sum (Client) | Failure reason (Client) |");
     for protocol_number in -1..=256 {
         // If we don't sleep here, the packets will be sent too fast and the server will not be able to keep up
-        std::thread::sleep(Duration::from_millis(10));
+        std::thread::sleep(Duration::from_millis((Duration::from_secs(1).as_millis() / 4) as u64));
 
         match send_packet(protocol_number, dst_ip, payload) {
             Ok((time_right_before_sending_packet, byte_sum)) => {
