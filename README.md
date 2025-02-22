@@ -457,7 +457,7 @@ Time to find out
 # Experiment #2: 
 At first I expected this experiment to be straight-forward (spoilers: it was NOT). How could it not..? 
 
-I planned to deploy my server on a machine using a cheap cloud provider like Digital Ocean—then I'd send all sorts of packets to it, UDP, TCP, my own protocol, you name it. Gathering statistics about packet drop, latency, whatever, then I'd make conclusions about the feasibility of not using UDP/TCP
+I planned to deploy my server on a machine using a cheap cloud provider like Digital Ocean—then I'd send all sorts of packets to it, TCP, UDP, my own protocol, you name it. Gathering statistics about packet drop, latency, whatever, then I'd make conclusions about the feasibility of not using TCP/UDP
 
 Simple!
 
@@ -627,10 +627,10 @@ Technically *yes*, you could use your own IP protocol. But unless you're a masoc
 - Your protocol will be randomly dropped at NAT gateways & firewalls. It might work on your own network, but I gaurentee it won't work on the internet
 - From my testing, there's no latency improvements from using a non-standard IP protocol
 
-TL;DR: ***Use UDP or TCP***
+TL;DR: ***Use TCP or UDP***
 # Resources
 - The [UDP protocol specification](https://datatracker.ietf.org/doc/html/rfc768) is so minimal it is almost funny
 - [IP Protocol numbers that are assigned for testing](https://datatracker.ietf.org/doc/html/rfc3692#section-2.1)
 - [The list of protocols](https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers) supported under the IP protocol is pretty interesting
 - [This](https://hackaday.com/2024/09/21/when-raw-network-sockets-arent-raw-raw-sockets-in-macos-and-linux/) article speaks about some differences between raw sockets in Linux & FreeBSD
-- How would you implement NAT on something other than UDP or TCP? [This](https://superuser.com/a/1108226) answer is pretty insightful
+- How would you implement NAT on something other than TCP or UDP? [This](https://superuser.com/a/1108226) answer is pretty insightful
