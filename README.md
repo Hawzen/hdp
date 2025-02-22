@@ -9,7 +9,7 @@ No idea.
 
 So I had to try.
 
-First, I sent the packets to myself, just to see how my own machine handled the poison I made up. Then, I sent them across continents to a remote Linux server to see if they’d actually make it.
+First, I sent the packets to myself, just to see how my own machine handled the poison I made up. Then, I sent them across continents to a remote Linux machine to see if they’d actually make it.
 # Some background first
 > [!NOTE]
 > Feel free to skip this section if you already know how the internet works. Otherwise, continue reading on
@@ -32,21 +32,36 @@ This is where **TCP**, **UDP**, and their weird cousins live. The **IP Protocol*
 
 But what if we used those *unused* numbers?
 # Experiment #1: Sending traffic.. to me!
+There are simply too many variables to this experiment. My OS, my router, the receiver's OS, and god knows how many middle boxes are littered on the open internet. It's hard to extrapolate conclusions from experimentation with all these moving parts—so I thought of the following: To begin, I'll send the packets to *my own machine*, this guarantees that any results are solely due to my OS's behaviour
+
 First, I designed a [simple protocol](./hdp_specification.md): **HDP**. The specifics don’t matter—what matters is that it doesn’t resemble any known protocol. It’s an outsider, something the OS and network stack weren’t expecting
 
-Next, I built a [server](./src/server/main.rs) and a [client](./src/client/main.rs). The client crafts an HDP packet (with an IP Protocol of 255) and hands it off to the OS, trusting it to deliver the data to itself. This sends the packet full circle, back to the OS, which (if all goes well) will recognize it, process it, and hand it off to the waiting server..! 
+Next, I built a [server, or a listener](./src/server/main.rs), whatever you call it. The machine running this code will be patiently waiting for any packets. Then I wrote a [client](./src/client/main.rs), the machine running this code will send HDP packets to the server
 
-I opened two shells—one was the client:
-```haskell
-$ fortune | cowsay | sudo cargo run --bin client 127.0.0.1
-```
+Finally, here are the steps I'll attempt
+1. Startup an HDP server
+	- Which will ask the OS to forward any packets with the protocol 255 to a socket it controls
+2. Run the HDP client, sending packets to my local machine
+	- The client will ask the OS to nicely deliver the packets to 127.0.01
+		- The OS is configured to hand packets with that target address to the loopback [network interface](https://en.wikipedia.org/wiki/Network_interface_controller)
+			- The loopback interface should realize: "uhhh.. this packet should go right back in?", and send it back to my own machine
+3. The OS delivers them to the HDP server unmodified..?? 🤞
 
-And in another shell I opened the server
+Let's do it
+
+I opened two shells—one was the server:
 ```haskell
 $ sudo cargo run --bin server
 ```
 
-Alright, let's send the packet via the client. 3, 2, 1, and.. the server got the message!
+And in another shell I opened the client
+```haskell
+$ fortune | cowsay | sudo cargo run --bin client 127.0.0.1
+```
+
+Alright, let's send the packet via the client. 3, 2, 1, and.. 
+
+The server got the message!
 ```haskell
 $ sudo cargo run --bin server
 ~~~ IP Header ~~~
@@ -84,7 +99,7 @@ Data:  _________________________________________
                 ||     ||
 ```
 
-Success! The OS accepted my protocol, looped it back, and delivered it to the server as if nothing was unusual. But before calling it a day, I had another question:
+Success! The OS accepted my protocol, looped it back, and delivered it to the server with no shenanigans happening, unexpected!. But before calling it a day, I had another question:
 
 What would happen if we repeated this experiment, whilst changing the protocol number defined in the IP packet? 
 
@@ -361,15 +376,14 @@ fortune | cowsay | sudo cargo run --bin client 127.0.0.1 # This time looping ove
 |             255 | 127.0.0.1          |               373 | 🫡                | 🫡                 | 373               | -                                                |                  nan |
 |             255 | 127.0.0.1          |               373 | 🫡                | 🫡                 | 373               | -                                                |                   71 |
 |             256 | nan                |               nan | 🤯                | 🤯                 | -                 | Invalid argument (os error 22)                   |                  nan |
-
-### What’s up with these failures?
+## What’s up with these failures?
 Most protocol numbers worked fine—the OS saw the packet, looped it back, and my server received it without an issue. But a few of them outright _failed_ at different points in the stack
 - **Protocols 1, 2, and 6 failed at the server side**. Meaning: the client successfully sent them, but the server never saw them
 - **Protocols 50 and 51 failed at the client side**. The OS refused to even send them
 - **Protocol 256 didn't even make it past the `socket()` call**
 
 But *why?* What’s making the OS treat these packets differently?
-### Syscalls: What actually matters
+## Syscalls: What actually matters
 One of the most useful debugging techniques I learnt debugging this stuff is, when dealing with low-level code, trace the *system calls* a process is making
 
 A [system call](https://en.wikipedia.org/wiki/System_call) for the uninitiated is just a function that allows applications to request privileged resources from the OS—whether that’s opening a file, allocating memory, or, in our case, sending a packet over the network
@@ -384,7 +398,7 @@ int sockfd = socket(
     255         // Protocol: We looped over this field.
 );
 ```
-### Revisiting the failures
+## Revisiting the failures
 **1, 2, and 6: The Server Never Sees Them**  
 These packets were successfully transmitted from the client, but they were intercepted before my server had a chance to look at them. That suggests something inside the OS intercepted them
 
@@ -421,20 +435,193 @@ No surprises here. But what *was* surprising is what happened when I tried the s
 After seeing these inconsistencies, I was curious as to how Linux would behave. So I spun up a Linux VM and re-ran the experiment. Right away, the behaviour was very different
 
 Running the server I quickly noticed that Linux does not allow binding a raw socket to protocol `0`—Some invalid protocol numbers like 256 *worked*. For reference, I logged the results in [`results_no_server_linux_client_loopback`](./samples/results_no_server_linux_client_loopback.md). I was satisfied that at least _some_ of the protocol numbers were working as expected
-### Lessons learned
+## Lessons learned
 Custom transport-layer protocols are doable, buuuuut the OS isn’t exactly welcoming. The networking stack has so many assumptions baked in, and raw sockets aren’t as raw as you’d expect
 
 I imagine this is why most new protocols live at the application layer instead. Instead of fighting the OS, engineers just build on top of existing transport protocols. QUIC, for example, runs over UDP and avoids these issues entirely
 
 And if you're ever working with raw sockets, *please* test across multiple OSes. If Darwin lets you do something, Linux might shut it down. If Linux is fine with it, Windows might pretend it doesn’t exist. There’s really no universal behaviour, even if they claim to _implement the POSIX standard_
 
-### Next step: What happens outside loopback?
+## Next step: What happens outside loopback?
 So far, these packets never left my machine. Now, I want to send HDP over the public internet:
--	Will routers forward it, or will they drop it?
--	Will firewalls let it through, or flag it as an attack?
--	Will it have different latency compared to TCP?
+- Will routers forward it, or will they drop it?
+- Will firewalls let it through, or flag it as an attack?
+- Will it have different latency compared to TCP?
 - Will I accidentally brick DigitalOcean’s network? :D
 Time to find out
-
-# TODOOOOOO
 # Experiment #2: 
+At first I expected this experiment to be straight-forward (spoilers: it was NOT). How could it not..? 
+
+I planned to deploy my server on a machine using a cheap cloud provider like Digital Ocean—then I'd send all sorts of packets to it, UDP, TCP, my own protocol, you name it. Gathering statistics about packet drop, latency, whatever, then I'd make conclusions about the feasibility of not using UDP/TCP
+
+Simple!
+
+But oh it was not, not at all. It wasn't that the experiment was difficult to setup—but what weirded me out was the results.. they weren't anything I expected or was prepared to deal with. Keep reading to see why
+## Setting up the server
+I rented the the cheapest VPS on Digital Ocean I could find, then set up my server and all the tooling I needed. Nice!
+
+Let's see where the server is..
+```haskell
+root@debian-s-1vcpu-512mb-10gb-fra1-01:~# curl myip.wtf
+161.35.222.56
+root@debian-s-1vcpu-512mb-10gb-fra1-01:~# curl ipinfo.io/161.35.222.56
+{
+  "ip": "161.35.222.56",
+  "city": "Frankfurt am Main",
+  "region": "Hesse",
+  "country": "DE",
+  "loc": "50.1155,8.6842",
+  "org": "AS14061 DigitalOcean, LLC",
+  "postal": "60306",
+  "timezone": "Europe/Berlin",
+  "readme": "https://ipinfo.io/missingauth"
+}
+```
+
+Alright, looks like the experiment will span continents given that I'm running my client on Saudi Arabia, and the server is hosted in Frankfurt
+
+Before running any deep analysis, I wanted to check that there is a network path between my Mac and the server, so I `ping`'ed the server from my Mac
+```haskell
+❯ ping 161.35.222.56
+PING 161.35.222.56 (161.35.222.56): 56 data bytes
+64 bytes from 161.35.222.56: icmp_seq=0 ttl=47 time=125.364 ms
+64 bytes from 161.35.222.56: icmp_seq=1 ttl=47 time=128.061 ms
+64 bytes from 161.35.222.56: icmp_seq=2 ttl=47 time=177.931 ms
+64 bytes from 161.35.222.56: icmp_seq=3 ttl=47 time=225.798 ms
+64 bytes from 161.35.222.56: icmp_seq=4 ttl=47 time=130.101 ms
+64 bytes from 161.35.222.56: icmp_seq=5 ttl=47 time=194.563 ms
+64 bytes from 161.35.222.56: icmp_seq=6 ttl=47 time=159.518 ms
+64 bytes from 161.35.222.56: icmp_seq=7 ttl=47 time=134.343 ms
+64 bytes from 161.35.222.56: icmp_seq=8 ttl=47 time=501.139 ms
+64 bytes from 161.35.222.56: icmp_seq=9 ttl=47 time=153.672 ms
+64 bytes from 161.35.222.56: icmp_seq=10 ttl=47 time=137.927 ms
+64 bytes from 161.35.222.56: icmp_seq=11 ttl=47 time=355.672 ms
+64 bytes from 161.35.222.56: icmp_seq=12 ttl=47 time=138.777 ms
+64 bytes from 161.35.222.56: icmp_seq=13 ttl=47 time=166.116 ms
+64 bytes from 161.35.222.56: icmp_seq=14 ttl=47 time=288.758 ms
+64 bytes from 161.35.222.56: icmp_seq=15 ttl=47 time=151.458 ms
+64 bytes from 161.35.222.56: icmp_seq=16 ttl=47 time=164.025 ms
+64 bytes from 161.35.222.56: icmp_seq=17 ttl=47 time=170.132 ms
+64 bytes from 161.35.222.56: icmp_seq=18 ttl=47 time=279.034 ms
+^C
+--- 161.35.222.56 ping statistics ---
+19 packets transmitted, 19 packets received, 0.0% packet loss
+```
+
+It seems it's quite far, but looks fine to me, let's send some packets using our new protocol!
+
+First let's start the server in our Digital Ocean machine
+```haskell
+root@debian-s-1vcpu-512mb-10gb-fra1-01:~/hdp/hdp# sudo cargo run --bin server
+Listening on protocol 255
+```
+
+And now we can send a packet from my Mac
+
+```haskell
+❯ fortune | cowsay | sudo cargo run --bin client 161.35.222.56
+| Protocol Number | Succeeded (Client) | Time (μs) (Client) | Byte sum (Client) | Failure reason (Client) |
+| 255 | 🫡 | timestamp | 563 | - |
+```
+
+Packet sent. Let's check the server again
+
+```haskell
+root@debian-s-1vcpu-512mb-10gb-fra1-01:~/hdp/hdp# sudo cargo run --bin server
+Listening on protocol 255
+| Protocol Number | Time (μs) (Server) | Source IP (Server) | Byte Sum (Server) |
+| --- | --- | --- |
+| 255 | timestamp | my_ip | 563 |
+```
+
+Excellent. It seems that all went well, or so I thought. In-fact, all went downhill starting here. I took a quick break then came back. Let's try sending the packet again..
+
+```haskell
+| Protocol Number | Time (μs) (Server) | Source IP (Server) | Byte Sum (Server) |
+| --- | --- | --- |
+| 255 | timestamp | my_ip | 563 |
+```
+
+It's stuck? I can't see the second packet
+
+I `Ctrl+C` and attempt doing it again. No results..? That can't be right, could it be a client side bug? Let's use `tcpdump` to see all outgoing packets from my device
+```haskell
+❯ sudo tcpdump -i any 'ip[9] == 255'
+tcpdump: data link type PKTAP
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on any, link-type PKTAP (Apple DLT_PKTAP), snapshot length 524288 bytes
+IP mac > 161.35.222.56:  reserved 427
+IP mac > 161.35.222.56:  reserved 427
+IP mac > 161.35.222.56:  reserved 427
+IP mac > 161.35.222.56:  reserved 427
+IP mac > 161.35.222.56:  reserved 427
+IP mac > 161.35.222.56:  reserved 427
+IP mac > 161.35.222.56:  reserved 427
+IP mac > 161.35.222.56:  reserved 427
+```
+
+They're definitely leaving my Mac. What about doing the same thing on the receiving end?
+
+```haskell
+root@debian-s-1vcpu-512mb-10gb-fra1-01:~/hdp# tcpdump -i any 'ip[9] > 17'
+tcpdump: data link type LINUX_SLL2
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on any, link-type LINUX_SLL2 (Linux cooked v2), snapshot length 262144 bytes
+
+```
+
+Nothing appeared
+
+I began doubting my earlier results, there they are in my shell. The timestamps and byte sums match. Was I imagining them? Is Linus Torvalds himself gaslighting me??
+
+Could my ISP's [NATing box](https://simple.wikipedia.org/wiki/Network_address_translation) not support custom IP protocols? I mean NAT'ing relies on ports—but my protocol is just black magic to them, it doesn't even define ports—they wouldn't be able to NAT anything even if they want to
+
+After digging a bit in, I found that Digital Ocean doesn't support non-standard IP Protocols
+
+![digital_ocean_sucks](./readme_assets/ihatedigitalocean.png)
+
+This is confusing. How did one packet survive? There really is no way to know, and I was banging my head against the wall trying to figure it out
+
+### One. Last. Try
+if any cloud provider would support non-standard IP Protocols, it'd be AWS
+
+I provisioned two machines. Set them up. Server. Client. It works.. !
+```haskell
+admin@ip-172-31-13-218:~/hdp$ sudo cargo run --bin server 255
+Server is listening on SockAddr { ss_family: 2, len: 16 }, protocol: 255
+| Protocol Number | Time (μs) (Server) | Source IP (Server) | Byte Sum (Server) |
+| --- | --- | --- |
+| 255 | timestamp | 54.153.13.186 | 33 |
+| 255 | timestamp | 54.153.13.186 | 34 |
+| 255 | timestamp | 54.153.13.186 | 35 |
+| 255 | timestamp | 54.153.13.186 | 36 |
+
+```
+
+Granted, the server was just two hops away from the client, and it didn't have to pass through the scary sea of the internet
+
+<img src="./readme_assets/latency_difference_between_hdp_and_udp.png" alt="Description" style="border-radius: 15px; width: 100%;">
+<p align="center"><sub>The latency is in the microseconds due to both machines being in the same datacenter.</sub></p>
+
+The latency difference between the HDP & UDP was a consistent, but negligible 20μs across various benchmarks
+
+#### But what about the internet?
+I tried sending packets from my Mac to the AWS server, and I reproduced the same one packet behaviour above. I left a sample of the results in [`tcpdump_tokyo_server_mac_client.md`](./samples/tcpdump_tokyo_sever_mac_client.md)
+
+And as expected, sending or recieving packets from the Digital Ocean didn't work
+
+There's no way to know for sure 
+
+# Lessons learned
+Technically *yes*, you could use your own IP protocol. But unless you're a masochist, I do not suggest it
+- Your code won't be portable, and you'll need to support various operating systems
+- Your protocol will be randomly dropped at NAT gateways & firewalls. It might work on your own network, but I gaurentee it won't work on the internet
+- From my testing, there's no latency improvements from using a non-standard IP protocol
+
+TL;DR: ***Use UDP or TCP***
+# Resources
+- The [UDP protocol specification](https://datatracker.ietf.org/doc/html/rfc768) is so minimal it is almost funny
+- [IP Protocol numbers that are assigned for testing](https://datatracker.ietf.org/doc/html/rfc3692#section-2.1)
+- [The list of protocols](https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers) supported under the IP protocol is pretty interesting
+- [This](https://hackaday.com/2024/09/21/when-raw-network-sockets-arent-raw-raw-sockets-in-macos-and-linux/) article speaks about some differences between raw sockets in Linux & FreeBSD
+- How would you implement NAT on something other than UDP or TCP? [This](https://superuser.com/a/1108226) answer is pretty insightful
