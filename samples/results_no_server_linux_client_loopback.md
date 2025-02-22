@@ -1,3 +1,4 @@
+```haskell
 | Protocol Number | Succeeded | Time before sending packet (ns) | Failure reason |
 | -1 | 🤯🤯🤯 | - | Invalid argument (os error 22) |
 | 0 | 🤯🤯🤯 | - | Protocol not supported (os error 93) |
@@ -257,3 +258,4 @@
 | 254 | 🫡🫡🫡 | 1739303387716436803 |
 | 255 | 🫡🫡🫡 | 1739303387716441470 |
 | 256 | 🫡🫡🫡 | 1739303387716443845 |
+```
