@@ -1,3 +1,4 @@
+```haskell
 tcpdump -vi lo
 tcpdump: listening on lo, link-type EN10MB (Ethernet), snapshot length 262144 bytes
 16:07:41.504650 IP (tos 0x0, ttl 64, id 6322, offset 0, flags [DF], proto ICMP (1), length 59)
@@ -502,3 +503,4 @@ tcpdump: listening on lo, link-type EN10MB (Ethernet), snapshot length 262144 by
     localhost > localhost: ICMP localhost protocol 0 unreachable, length 67
 	IP (tos 0x0, ttl 64, id 1692, offset 0, flags [DF], proto Options (0), length 59)
     localhost > localhost:  hopopt 39
+```
