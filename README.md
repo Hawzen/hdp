@@ -574,13 +574,17 @@ Nothing appeared
 
 I began doubting my earlier results, there they are in my shell. The timestamps and byte sums match. Was I imagining them? Is Linus Torvalds himself gaslighting me??
 
-Could my ISP's [NATing box](https://simple.wikipedia.org/wiki/Network_address_translation) not support custom IP protocols? I mean NAT'ing relies on ports—but my protocol is just black magic to them, it doesn't even define ports—they wouldn't be able to NAT anything even if they want to
+Wait..? How did my ISP's [NATing box](https://simple.wikipedia.org/wiki/Network_address_translation) forward the packet? NAT'ing relies on ports—but my protocol is just black magic to them
+
+I'm confused
+
+Very confused
 
 After digging a bit in, I found that Digital Ocean doesn't support non-standard IP Protocols
 
 ![digital_ocean_sucks](./readme_assets/ihatedigitalocean.png)
 
-This is confusing. How did one packet survive? There really is no way to know, and I was banging my head against the wall trying to figure it out
+This still doesn't explain it. How did one packet survive? There really is no way to know, and I was banging my head against the wall trying to figure it out
 
 ### One. Last. Try
 if any cloud provider would support non-standard IP Protocols, it'd be AWS
@@ -606,11 +610,11 @@ Granted, the server was just two hops away from the client, and it didn't have t
 The latency difference between the HDP & UDP was a consistent, but negligible 20μs across various benchmarks
 
 #### But what about the internet?
-I tried sending packets from my Mac to the AWS server, and I reproduced the same one packet behaviour above. I left a sample of the results in [`tcpdump_tokyo_server_mac_client.md`](./samples/tcpdump_tokyo_sever_mac_client.md)
+I tried sending packets from my Mac to the AWS server, and I reproduced the same one packet behaviour above. I left a sample of the results in [`tcpdump_tokyo_server_mac_client.md`](./samples/tcpdump_tokyo_sever_mac_client.md). I sent 1 packet for all protocols, and all of them stopped working after the first packet except UDP/TCP/ICMP
 
-And as expected, sending or recieving packets from the Digital Ocean didn't work
+And as expected, sending or recieving packets from the Digital Ocean to AWS didn't work
 
-There's no way to know for sure 
+There's no way to know for sure.
 
 # Lessons learned
 Technically *yes*, you could use your own IP protocol. But unless you're a masochist, I do not suggest it
