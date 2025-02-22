@@ -615,9 +615,9 @@ Granted, the server was just two hops away from the client, and it didn't have t
 The latency difference between the HDP & UDP was a consistent, but negligible 20μs across various benchmarks
 
 #### But what about the internet?
-I tried sending packets from my Mac to the AWS server, and I reproduced the same one packet behaviour above. I left a sample of the results in [`tcpdump_tokyo_server_mac_client.md`](./samples/tcpdump_tokyo_sever_mac_client.md). I sent 1 packet for all protocols, and all of them stopped working after the first packet except UDP/TCP/ICMP
+I tried sending packets from my Mac to the AWS server, and I reproduced the same one packet behaviour above. I left a sample of the results in [`tcpdump_tokyo_server_mac_client.md`](./samples/tcpdump_tokyo_sever_mac_client.md). I sent 1 packet for all protocols, and all of them stopped working after the first packet except TCP/UDP/ICMP
 
-And as expected, sending or recieving packets from the Digital Ocean to AWS didn't work
+And as expected, sending or recieving packets from the Digital Ocean machine to the AWS machine didn't work
 
 There's no way to know for sure.
 
