@@ -1,3 +1,4 @@
+```haskell
 16:11:43.089182 IP (tos 0x0, ttl 64, id 26622, offset 0, flags [none], proto unknown (255), length 505, bad cksum 0 (->1206)!)
     localhost > localhost:  reserved 485
 16:11:43.101885 IP (tos 0x0, ttl 64, id 46627, offset 0, flags [none], proto Options (0), length 505, bad cksum 0 (->c4df)!)
@@ -508,3 +509,4 @@
     localhost > localhost:  exptest-254 485
 16:11:46.215325 IP (tos 0x0, ttl 64, id 18298, offset 0, flags [none], proto unknown (255), length 505, bad cksum 0 (->328a)!)
     localhost > localhost:  reserved 485
+```
