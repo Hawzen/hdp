@@ -114,7 +114,9 @@ Let's see:
 fortune | cowsay | sudo cargo run --bin client 127.0.0.1 # This time looping over protocol numbers
 ```
 
-**Results**:
+<details>
+
+<summary><h2>Results</h2></summary>
 
 | Protocol Number | Source IP (Server) | Byte Sum (Server) | Received (Server) | Succeeded (Client) | Byte sum (Client) | Failure reason (Client)                          | Time difference (μs) |
 | --------------: | :----------------- | ----------------: | :---------------- | :----------------- | :---------------- | :----------------------------------------------- | -------------------: |
@@ -376,6 +378,9 @@ fortune | cowsay | sudo cargo run --bin client 127.0.0.1 # This time looping ove
 |             255 | 127.0.0.1          |               373 | 🫡                | 🫡                 | 373               | -                                                |                  nan |
 |             255 | 127.0.0.1          |               373 | 🫡                | 🫡                 | 373               | -                                                |                   71 |
 |             256 | nan                |               nan | 🤯                | 🤯                 | -                 | Invalid argument (os error 22)                   |                  nan |
+</details>
+
+
 ## What’s up with these failures?
 Most protocol numbers worked fine—the OS saw the packet, looped it back, and my server received it without an issue. But a few of them outright _failed_ at different points in the stack
 - **Protocols 1, 2, and 6 failed at the server side**. Meaning: the client successfully sent them, but the server never saw them
