@@ -1,3 +1,4 @@
+```haskell
 execve("/root/.cargo/bin/cargo", ["cargo", "run", "--bin", "client", "127.0.0.1"], 0xffffe4fe1aa0 /* 8 vars */) = 0
 brk(NULL)                               = 0xaaaaf6e9a000
 mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0xffffb16ff000
@@ -3411,3 +3412,4 @@ sigaltstack({ss_sp=NULL, ss_flags=SS_DISABLE, ss_size=16384}, NULL) = 0
 munmap(0xffff89f35000, 20480)           = 0
 exit_group(0)                           = ?
 +++ exited with 0 +++
+```
