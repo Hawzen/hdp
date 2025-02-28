@@ -42,7 +42,7 @@ Finally, here are the steps I'll attempt
 1. Startup an HDP server
 	- Which will ask the OS to forward any packets with the protocol 255 to a socket it controls
 2. Run the HDP client, sending packets to my local machine
-	- The client will ask the OS to nicely deliver the packets to 127.0.01
+	- The client will ask the OS to nicely deliver the packets to 127.0.0.1
 		- The OS is configured to hand packets with that target address to the loopback [network interface](https://en.wikipedia.org/wiki/Network_interface_controller)
 			- The loopback interface should realize: "uhhh.. this packet should go right back in?", and send it back to my own machine
 3. The OS delivers them to the HDP server unmodified..?? 🤞
